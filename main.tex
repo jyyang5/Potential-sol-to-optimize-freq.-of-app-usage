@@ -1,0 +1,163 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{A potential solution to increase app usage}
+\author{Jingyun Yaung }
+\date{December, 23, 2018}
+
+\usepackage{natbib}
+\usepackage{graphicx}
+\usepackage{amsfonts}
+\usepackage{algorithm}  % for Pesudo code 
+\usepackage{algorithmic}
+\usepackage{stix}
+\usepackage{amsmath}
+
+
+\begin{document}
+
+\maketitle
+
+\section{Problem and formulation}
+Given an app with multiple functions (features), a fixed budget per day, and a changing number of users per day. We want to maximize the averaged user frequency of usage while with the consideration of a termination criteria and the rate of convergence.
+
+For formulation purposes, we define a fixed budget per day as $BUDGET \in \mathbb{Z}^+$, app features $feature_i, i \in \mathbb{Z}^+ ,i \in [1,N]$ where $N \in \mathbb{Z},N \geq 1$, the population of users in day $(g)$ as $X^{(g)}$ with size $\vert X^{(g)} \vert \in \mathbb{Z}^+$, and the frequency of usage for user $x_j^{(g)}\in \mathbb{R}^N$ in day $(g)$  as $y_j^{(g)} \in \mathbb{R}$. We want to find a strategy $S$ s.t. $max \{ \sum_{j=1}^{\vert X^{(g)} \vert }y_j^{(g)}/\vert X^{(g)} \vert \}$. This can be write in an equivalent form $min\{ -\sum_{j=1}^{\vert X^{(g)} \vert }y_j^{(g)}/\vert X^{(g)} \vert \}$ for optimization purposes.
+
+% We consider a more flexible strategy that is dynamic i.e., we find a strategy $S[i]$ in day $i$ s.t. $max\{ \sum_{j=1}^{user[i]}u_j[i]/user[i] \}$. 
+
+we consider a black-box scenario and the objective function is defined as $f: \mathbb{R}^N \rightarrow \mathbb{R}$ that maps a user (individual) $x_j^{(g)}$ from generation $(g)$ in the $N$-dimensional search space to its corresponding objective function value (frequency of usage) in the fitness space. The minimization of the objective function is considered where an individual with a small objective function value has a larger fitness.
+
+
+
+
+
+
+\section{Procedure}
+
+A surrogate model (computational model built by previously evaluated points using the true objective function), specifically a Gaussian Process (GP) surrogate model \cite{Murphy:2012:MLP:2380985}\cite{rasmussen2004gaussian}  is used to model the true objective function. We make the assumption that the estimation of the objective function value using the surrogate model can be achieved at vanishing cost as opposed to that using the true objective function. The GP surrogate model is used as a filter that preselect the (user) population in the sense only those users regarded good by the surrogate model are evaluated (i.e., we only assign money to users that is regarded as good by the surrogate model). 
+
+An Evolutionary Strategy (ES) is then used to optimize the objective function where, in this context, we use the well-established Covariance Matrix Adaptation Evolution Strategy by Hansen \cite{hansen2016cma}. In each generation, a population of $\vert X^{(g)} \vert$ offspring (users) are generated from $\mu$ parents (users in generation $(g-1)$ with the largest fitness). The offspring population $X^{(g)}$ is evaluated by the surrogate model rather than the true objective function i.e., the fitness (frequency of usage) is estimated by the surrogate model for pres-election, achieved at vanishing cost. The offspring is ranked according to their estimated fitness $f_\epsilon (x^{(g)}_{i;\vert X^{(g)} \vert})$ where $x^{(g)}_{i;\vert X^{(g)} \vert}$ denotes the offspring with ith largest fitness in generation $(g)$, that has $f_\epsilon(x^{(g)}_{i;\vert X^{(g)} \vert}) < f_\epsilon(x^{(g)}_{j;\vert X^{(g)} \vert})$ holds for $\forall i,j \in [1, \vert X^{(g)}\vert ],1 \leq i<j \leq \vert X^{(g)}\vert $. 
+
+Then we take the $\mu^{(g)}$ best offspring (users) according to their fitness and evaluate them using the true objective function, followed by a recombination where the best $\mu^{(g)}$ offspring are recombined into a centroid $x_{\text{centroid}}^{(g)}$ for offspring generation in the next generation.
+
+\textbf{NOTE}: For simplicity, we only consider one type of users, i.e. there is one objective function $f$. But more complex cases with multiple types of users is discussed in Section 6.
+
+\subsection{ Random initialization  }
+    
+Initialize the user population $X^{(1)}  = \{x_i^{(1)}: x_i^{(1)}= BUDGET \|z_i\|_1 /\sum_{i=1}^{\|X^{(1)} \| } \|z_i\|_1 \}$ where $z_i \in \mathbb{R}^N $ is standard normally distributed, $\| \|_1$ denotes the L1-Norm, and the denominator is a normalization term s.t. the total budget used sums up to $BUDGET$ (i.e., the budget is used up). 
+     
+
+\subsection{Train the Gaussian Process surrogate model }  
+
+We build a local surrogate model where the training set of the surrogate model is updated frequently as the generation goes. The points in the training set of the surrogate model move in the direction where the ES precedes to ensure the points estimated can be trusted. w.l.o.g. we build the initial training set using the first 2 generations. From the third generation, we evaluate a proportion of the individuals (users) and add the corresponding objective function values to update the training set so that the training set is keeping updated.
+
+
+\subsection{GP-assisted ES}
+The GP surrogate model is used to assist the CMA-ES that help avoid unnecessary objective function evaluations in each generation where only the best $\mu$ individuals (users) ranked by the surrogate model and the resulting centroid are evaluated by the true objective function. 
+
+\subsection{Termination criteria}
+The termination criteria can be defined either as the step size parameter $\sigma$ in the GP is too small, meaning the strategy has converged to an optimal from a mathematical perspective or the matrix has lost its working precision. 
+
+Given the nature of ES is a nature-inspired direct search method, the goal is to find a strategy that can dynamically model the user behaviours. The usual termination criteria is reached when the objective function value reaches a certain value (e.g., in minimization problem usually $10^{-8}$). But here, it can be viewed as the value of expected frequency of app usage, a value obtained taking consideration of other departments (sells, marketing and etc.).
+
+
+
+\section{Algorithm}
+In this section, we use the well-established parameter setting in CMA-ES by Hansen \cite{hansen2016cma} for step size adaptation and covaraince matrix update. Since the mutation is standard normally distributed that may result negative components in an offspring that is not feasible in the context of assigning money to users. We introduce a smooth function to avoid such problem that follows
+
+\begin{align*}
+smooth(x) = 
+\begin{cases}
+0,& \text{if } x[i] <0\\
+x[i],&\text{otherwise},\forall i \in [1, \vert x\vert]
+\end{cases}
+\end{align*}
+where $x[i]$ represents the value in ith dimension of $x$.
+
+It is important to note that the Alg. 1 shown below in each generation, the offspring and its coresponding mutation is normalized in terms of $BUDGET$ so that in each generation the money allocated sums up to $BUDGET$.
+
+\pagebreak
+\begin{algorithm}
+\caption{Surrogate Model Assisted CMA-ES (GP-CMA-ES)}
+\begin{algorithmic}[1]
+\STATE Initialize parameters $c,d, E \| \mathcal{N}(0,I) \|,w_i$
+\STATE Initialize $g, s^{(0)},\mathbf{C^{0}}, X^{(1)}$
+
+\WHILE{not terminate()} 
+    \STATE $\lambda^{(g)} = \vert X^{(g)}\vert$
+    \STATE Update coresponding $\mu^{(g)}$
+	\FOR{$i=1,2,...,\lambda^{(g)} $}
+		\STATE Generate standard normally distributed $z_i^{(g)} \in \mathbb{R}^N $
+		\hfill$\blacktriangleright$\Comment{Mutation} % comment
+		\STATE $y_i^{(g)} \leftarrow x_{\text{centroid}}^{(g)} + \sigma^{(g)} z_i^{(g)}$ 
+		\STATE $y_i^{(g)} \leftarrow smooth(y_i^{(g)}) $ 
+		\hfill\Comment{$\triangleright$ For negative components} % comment
+		\STATE Evaluate $y_i^{(g)}$ using the surrogate model, yielding $f_\epsilon (y_i^{(g)})$
+	\ENDFOR
+	\STATE $Y_{Train} = \{y_{i;\lambda^{(g)}}^{(g)}:y_{i;\lambda^{(g)}}^{(g)} = x_{\text{centroid}}^{(g)} + \sigma^{(g)} z_{i;\lambda^{(g)}}^{(g)}  \},i \in [1,\mu^{(g)}]$
+	\hfill\Comment{$\triangleright$For faster convergence} % comment=x_{\text{centroid}}^{(g)} z_{i;\lambda^{(g)}},i \in [1,\mu] \}$
+    \STATE Evaluate $Y_{Train}$ using true objective function, yielding $fY_{Train}$
+    \STATE Normalize all offspring and the corresponding mutation regarding $BUDGET$
+	% \STATE $fY_{\epsilon}^{(g)} \leftarrow \{f_{\epsilon}(x_{\text{centroid}}^{(g)} + \sigma^{(g)} z_i^{(g)}): i=1,2,...,\lambda\}$
+	% \STATE $z_{\text{step}}^{(g)} \leftarrow \frac{1}{\mu} \sum_{i=1}^{\mu} z_{i;\lambda}^{(g)}$, where $z_{i;\lambda}^{(g)} \in$ select\_best $(\mu,\{ \},fY_{\epsilon}^{(g)})$
+	% \STATE $X^{(g+1)} \leftarrow  select\_best (\mu,Y^{(g)},fY_{\epsilon}^{(g)})$
+	\STATE $z_{\text{step}}^{(g)} \leftarrow \sum_{i=1}^{\mu} w_i z_{i;\lambda^{(g)}}^{(g)}$
+	\hfill$\blacktriangleright$\Comment{Selection based on surrogate model} % comment
+	\STATE $x_{\text{centroid}}^{(g+1)} \leftarrow  x_{\text{centroid}}^{(g)} + \sigma^{(g)} z_{\text{step}}^{(g)}$ 
+	\hfill$\blacktriangleright$\Comment{Recombination} % comment
+	\STATE Evaluate $x_{\text{centroid}}^{(g+1)}$ using true objective function, yieding $f(x_{\text{centroid}}^{(g+1)})$
+	\STATE Update surrogate model by adding $( Y_{train} \cup  \{ x_{\text{centroid}}^{(g+1)} \}, fY_{train} \cup  \{ f(x_{\text{centroid}}^{(g+1)}) \} )$
+	\STATE $\mathbf{C}^{(g+1)} = (1-c_1-c_\mu \sum w_j)\mathbf{C}^{(g)} + c_1 s^{(g+1)}s^{g+1}^T$
+	
+	\STATE $s^{(g)} \leftarrow (1-c)s + \sqrt{ c(2-c) \mu} z_{\text{step}}^{(g)}$
+	\STATE $\sigma^{(g+1)} \leftarrow \sigma^{(g)}  \text{exp} \left(\frac{c}{d} \frac{\| s^{(g)} \|} { E \| \mathcal{N}(0,I) \|} -1 \right )$
+	\STATE $g \leftarrow g + 1$
+\ENDWHILE
+
+\end{algorithmic}
+\end{algorithm}
+
+
+
+\section{Evaluation}
+
+\subsection{Rate of convergence}
+We can control the fraction of candidate solutions evaluated in each iteration or the size of $Y_{Train}$ to control the rate of convergence given the following. As more candidate solutions are evaluated using the true objective function, more information about the objective function is extracted. It is beneficial in bringing faster rate of convergence from two aspects. Firstly, the surrogate model is more accurate and can more effectively filters the poor offspring and better assists the ES compared with a less accurate model. Secondly, more information both regarding the step information and distribution of the problem can be modelled by the covariance matrix and search path that improve the efficiency of the ES.
+
+
+\subsection{Computational cost}
+
+The computational cost of an $(\mu/\mu,\lambda)$-ES with and without surrogate model assistance in an ideal scenario is $\lambda$ because only the centroid is evaluated using the true objective function. But for an industrial problem, we want to achieve faster convergence for the sake of time efficiency. So that the proposed algorithm makes an additional $\mu$ true objective function calls in each iteration. The computational saving for $(\mu/\mu,\lambda)$-ES with surrogate model assistance by a factor of $\lambda/(\mu+1)$ compared with the one without surrogate model assistance. The computational saving can be huge especially when the number of app users is large in size.
+
+
+\section{Difficulties}
+\begin{itemize}
+    \item Appearance of non-negative values
+    
+    Each dimension of an offspring must be non negative. We cannot assign a negative amount of money to a user i.e., that the user pay extra money. But this weakens the variation process in the ES where a standard normally distributed vector $Z$ is generated and added to the centroid in offspring generation that may result a negative value in the resulted offspring. 
+    
+    \item GP training size and length scale
+    
+    We built a local surrogate model that is small in training size. But too small a training size may result a inaccurate surrogate model, whereas a relative large training size may break the assumption that the objective function evaluation can be achieved at vanishing cost. So it would be beneficial if we can construct a training size adaptation mechanism that adapts training size given a varying population in each generation. 
+    
+    Another parameter in GP is the length scale factor that also requires fine-tuning. A length-scale adaption mechanism is also desired.
+    
+    \item The accuracy of the surrogate model 
+    
+    The effectiveness of surrogate modelling largely depends on the model accuracy i.e., how good the objective function is approximated. One possible approach is to introduce a surrogate accuracy control mechanism where we keep evaluating offspring using the true objective function until the predicted user frequencies for a new population sampled are within a certain number e.g., 20\% of the true value obtained. An illustration of this is the accuracy control used in the metamodel proposed by Kern et al.\cite{10.1007/11844297_95}.  
+    
+    \item The smooth function 
+    
+    The use of the $smooth()$ function can affect the variation of ES. It is worth exploring when to apply the $smooth()$ function, whether the centroid should be smoothed or even come up with a better smooth function with the minimal impact possible on the ES.
+    
+\end{itemize}
+
+
+
+\section{Extension}
+Here we only consider one type of customers. But it is natural to extend the framework to deal with different types of users according to the corresponding behaviours using algorithms like k-means, KNN, or initialize the ES with different poplations that allows immigration between different populations (most preferred). In these cases, suppose the number of resulted user types is $k$.  The problem can be modelled using $K$ different objective functions $f_i,i\in[1,K]$. For each objective function, we build a surrogate model and a corresponding ES, since the total budget is fixed. We can use another CMA-ES to optimize the overall budget allocation between different populations, specifically the weights in different populations. 
+
+
+\bibliographystyle{plain}
+\bibliography{references}
+\end{document}
